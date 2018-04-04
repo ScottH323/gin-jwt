@@ -47,12 +47,12 @@ func TestMissingRealm(t *testing.T) {
 		Key:        key,
 		Timeout:    time.Hour,
 		MaxRefresh: time.Hour * 24,
-		Authenticator: func(userId string, password string, c *gin.Context) (string, bool) {
+		Authenticator: func(userId string, password string, c *gin.Context) (string, error) {
 			if userId == "admin" && password == "admin" {
-				return "", true
+				return "", nil
 			}
 
-			return "", false
+			return "", ErrFailedAuthentication
 		},
 	}
 
@@ -68,12 +68,12 @@ func TestMissingKey(t *testing.T) {
 		Realm:      "test zone",
 		Timeout:    time.Hour,
 		MaxRefresh: time.Hour * 24,
-		Authenticator: func(userId string, password string, c *gin.Context) (string, bool) {
+		Authenticator: func(userId string, password string, c *gin.Context) (string, error) {
 			if userId == "admin" && password == "admin" {
-				return "", true
+				return "", nil
 			}
 
-			return "", false
+			return "", ErrFailedAuthentication
 		},
 	}
 
@@ -135,12 +135,12 @@ func TestMissingTimeOut(t *testing.T) {
 	authMiddleware := &GinJWTMiddleware{
 		Realm: "test zone",
 		Key:   key,
-		Authenticator: func(userId string, password string, c *gin.Context) (string, bool) {
+		Authenticator: func(userId string, password string, c *gin.Context) (string, error) {
 			if userId == "admin" && password == "admin" {
-				return "", true
+				return "", nil
 			}
 
-			return "", false
+			return "", ErrFailedAuthentication
 		},
 	}
 
@@ -154,12 +154,12 @@ func TestMissingTokenLookup(t *testing.T) {
 	authMiddleware := &GinJWTMiddleware{
 		Realm: "test zone",
 		Key:   key,
-		Authenticator: func(userId string, password string, c *gin.Context) (string, bool) {
+		Authenticator: func(userId string, password string, c *gin.Context) (string, error) {
 			if userId == "admin" && password == "admin" {
-				return "", true
+				return "", nil
 			}
 
-			return "", false
+			return "", ErrFailedAuthentication
 		},
 	}
 
@@ -200,13 +200,13 @@ func TestInternalServerError(t *testing.T) {
 
 	r.GET("/auth/hello").
 		Run(handler, func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
-			data := []byte(r.Body.String())
+		data := []byte(r.Body.String())
 
-			message, _ := jsonparser.GetString(data, "message")
+		message, _ := jsonparser.GetString(data, "message")
 
-			assert.Equal(t, ErrMissingRealm.Error(), message)
-			assert.Equal(t, http.StatusInternalServerError, r.Code)
-		})
+		assert.Equal(t, ErrMissingRealm.Error(), message)
+		assert.Equal(t, http.StatusInternalServerError, r.Code)
+	})
 }
 
 func TestErrMissingSecretKeyForLoginHandler(t *testing.T) {
@@ -224,16 +224,16 @@ func TestErrMissingSecretKeyForLoginHandler(t *testing.T) {
 
 	r.POST("/login").
 		SetJSON(gofight.D{
-			"username": "admin",
-			"password": "admin",
-		}).
+		"username": "admin",
+		"password": "admin",
+	}).
 		Run(handler, func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
-			data := []byte(r.Body.String())
-			message, _ := jsonparser.GetString(data, "message")
+		data := []byte(r.Body.String())
+		message, _ := jsonparser.GetString(data, "message")
 
-			assert.Equal(t, ErrMissingSecretKey.Error(), message)
-			assert.Equal(t, http.StatusInternalServerError, r.Code)
-		})
+		assert.Equal(t, ErrMissingSecretKey.Error(), message)
+		assert.Equal(t, http.StatusInternalServerError, r.Code)
+	})
 }
 
 func TestMissingAuthenticatorForLoginHandler(t *testing.T) {
@@ -250,16 +250,16 @@ func TestMissingAuthenticatorForLoginHandler(t *testing.T) {
 
 	r.POST("/login").
 		SetJSON(gofight.D{
-			"username": "admin",
-			"password": "admin",
-		}).
+		"username": "admin",
+		"password": "admin",
+	}).
 		Run(handler, func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
-			data := []byte(r.Body.String())
-			message, _ := jsonparser.GetString(data, "message")
+		data := []byte(r.Body.String())
+		message, _ := jsonparser.GetString(data, "message")
 
-			assert.Equal(t, ErrMissingAuthenticatorFunc.Error(), message)
-			assert.Equal(t, http.StatusInternalServerError, r.Code)
-		})
+		assert.Equal(t, ErrMissingAuthenticatorFunc.Error(), message)
+		assert.Equal(t, http.StatusInternalServerError, r.Code)
+	})
 }
 
 func TestLoginHandler(t *testing.T) {
@@ -272,12 +272,12 @@ func TestLoginHandler(t *testing.T) {
 			// Set custom claim, to be checked in Authorizator method
 			return map[string]interface{}{"testkey": "testval", "exp": 0}
 		},
-		Authenticator: func(userId string, password string, c *gin.Context) (string, bool) {
+		Authenticator: func(userId string, password string, c *gin.Context) (string, error) {
 			if userId == "admin" && password == "admin" {
-				return "", true
+				return "", nil
 			}
 
-			return "", false
+			return "", ErrFailedAuthentication
 		},
 		Authorizator: func(userId string, c *gin.Context) bool {
 			return true
@@ -290,40 +290,40 @@ func TestLoginHandler(t *testing.T) {
 
 	r.POST("/login").
 		SetJSON(gofight.D{
-			"username": "admin",
-		}).
+		"username": "admin",
+	}).
 		Run(handler, func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
-			data := []byte(r.Body.String())
+		data := []byte(r.Body.String())
 
-			message, _ := jsonparser.GetString(data, "message")
+		message, _ := jsonparser.GetString(data, "message")
 
-			assert.Equal(t, ErrMissingLoginValues.Error(), message)
-			assert.Equal(t, http.StatusBadRequest, r.Code)
-			assert.Equal(t, "application/json; charset=utf-8", r.HeaderMap.Get("Content-Type"))
-		})
+		assert.Equal(t, ErrMissingLoginValues.Error(), message)
+		assert.Equal(t, http.StatusBadRequest, r.Code)
+		assert.Equal(t, "application/json; charset=utf-8", r.HeaderMap.Get("Content-Type"))
+	})
 
 	r.POST("/login").
 		SetJSON(gofight.D{
-			"username": "admin",
-			"password": "test",
-		}).
+		"username": "admin",
+		"password": "test",
+	}).
 		Run(handler, func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
-			data := []byte(r.Body.String())
+		data := []byte(r.Body.String())
 
-			message, _ := jsonparser.GetString(data, "message")
+		message, _ := jsonparser.GetString(data, "message")
 
-			assert.Equal(t, ErrFailedAuthentication.Error(), message)
-			assert.Equal(t, http.StatusUnauthorized, r.Code)
-		})
+		assert.Equal(t, ErrFailedAuthentication.Error(), message)
+		assert.Equal(t, http.StatusUnauthorized, r.Code)
+	})
 
 	r.POST("/login").
 		SetJSON(gofight.D{
-			"username": "admin",
-			"password": "admin",
-		}).
+		"username": "admin",
+		"password": "admin",
+	}).
 		Run(handler, func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
-			assert.Equal(t, http.StatusOK, r.Code)
-		})
+		assert.Equal(t, http.StatusOK, r.Code)
+	})
 }
 
 func performRequest(r http.Handler, method, path string, token string) *httptest.ResponseRecorder {
@@ -346,12 +346,12 @@ func TestParseToken(t *testing.T) {
 		Key:        key,
 		Timeout:    time.Hour,
 		MaxRefresh: time.Hour * 24,
-		Authenticator: func(userId string, password string, c *gin.Context) (string, bool) {
+		Authenticator: func(userId string, password string, c *gin.Context) (string, error) {
 			if userId == "admin" && password == "admin" {
-				return userId, true
+				return userId, nil
 			}
 
-			return userId, false
+			return userId, ErrFailedAuthentication
 		},
 	}
 
@@ -361,35 +361,35 @@ func TestParseToken(t *testing.T) {
 
 	r.GET("/auth/hello").
 		SetHeader(gofight.H{
-			"Authorization": "",
-		}).
+		"Authorization": "",
+	}).
 		Run(handler, func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
-			assert.Equal(t, http.StatusUnauthorized, r.Code)
-		})
+		assert.Equal(t, http.StatusUnauthorized, r.Code)
+	})
 
 	r.GET("/auth/hello").
 		SetHeader(gofight.H{
-			"Authorization": "Test 1234",
-		}).
+		"Authorization": "Test 1234",
+	}).
 		Run(handler, func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
-			assert.Equal(t, http.StatusUnauthorized, r.Code)
-		})
+		assert.Equal(t, http.StatusUnauthorized, r.Code)
+	})
 
 	r.GET("/auth/hello").
 		SetHeader(gofight.H{
-			"Authorization": "Bearer " + makeTokenString("HS384", "admin"),
-		}).
+		"Authorization": "Bearer " + makeTokenString("HS384", "admin"),
+	}).
 		Run(handler, func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
-			assert.Equal(t, http.StatusUnauthorized, r.Code)
-		})
+		assert.Equal(t, http.StatusUnauthorized, r.Code)
+	})
 
 	r.GET("/auth/hello").
 		SetHeader(gofight.H{
-			"Authorization": "Bearer " + makeTokenString("HS256", "admin"),
-		}).
+		"Authorization": "Bearer " + makeTokenString("HS256", "admin"),
+	}).
 		Run(handler, func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
-			assert.Equal(t, http.StatusOK, r.Code)
-		})
+		assert.Equal(t, http.StatusOK, r.Code)
+	})
 }
 
 func TestParseTokenRS256(t *testing.T) {
@@ -402,12 +402,12 @@ func TestParseTokenRS256(t *testing.T) {
 		SigningAlgorithm: "RS256",
 		PrivKeyFile:      "testdata/jwtRS256.key",
 		PubKeyFile:       "testdata/jwtRS256.key.pub",
-		Authenticator: func(userId string, password string, c *gin.Context) (string, bool) {
+		Authenticator: func(userId string, password string, c *gin.Context) (string, error) {
 			if userId == "admin" && password == "admin" {
-				return userId, true
+				return userId, nil
 			}
 
-			return userId, false
+			return userId, ErrFailedAuthentication
 		},
 	}
 
@@ -417,35 +417,35 @@ func TestParseTokenRS256(t *testing.T) {
 
 	r.GET("/auth/hello").
 		SetHeader(gofight.H{
-			"Authorization": "",
-		}).
+		"Authorization": "",
+	}).
 		Run(handler, func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
-			assert.Equal(t, http.StatusUnauthorized, r.Code)
-		})
+		assert.Equal(t, http.StatusUnauthorized, r.Code)
+	})
 
 	r.GET("/auth/hello").
 		SetHeader(gofight.H{
-			"Authorization": "Test 1234",
-		}).
+		"Authorization": "Test 1234",
+	}).
 		Run(handler, func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
-			assert.Equal(t, http.StatusUnauthorized, r.Code)
-		})
+		assert.Equal(t, http.StatusUnauthorized, r.Code)
+	})
 
 	r.GET("/auth/hello").
 		SetHeader(gofight.H{
-			"Authorization": "Bearer " + makeTokenString("HS384", "admin"),
-		}).
+		"Authorization": "Bearer " + makeTokenString("HS384", "admin"),
+	}).
 		Run(handler, func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
-			assert.Equal(t, http.StatusUnauthorized, r.Code)
-		})
+		assert.Equal(t, http.StatusUnauthorized, r.Code)
+	})
 
 	r.GET("/auth/hello").
 		SetHeader(gofight.H{
-			"Authorization": "Bearer " + makeTokenString("RS256", "admin"),
-		}).
+		"Authorization": "Bearer " + makeTokenString("RS256", "admin"),
+	}).
 		Run(handler, func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
-			assert.Equal(t, http.StatusOK, r.Code)
-		})
+		assert.Equal(t, http.StatusOK, r.Code)
+	})
 }
 
 func TestRefreshHandlerRS256(t *testing.T) {
@@ -458,12 +458,12 @@ func TestRefreshHandlerRS256(t *testing.T) {
 		SigningAlgorithm: "RS256",
 		PrivKeyFile:      "testdata/jwtRS256.key",
 		PubKeyFile:       "testdata/jwtRS256.key.pub",
-		Authenticator: func(userId string, password string, c *gin.Context) (string, bool) {
+		Authenticator: func(userId string, password string, c *gin.Context) (string, error) {
 			if userId == "admin" && password == "admin" {
-				return userId, true
+				return userId, nil
 			}
 
-			return userId, false
+			return userId, ErrFailedAuthentication
 		},
 	}
 
@@ -473,33 +473,33 @@ func TestRefreshHandlerRS256(t *testing.T) {
 
 	r.GET("/auth/refresh_token").
 		SetHeader(gofight.H{
-			"Authorization": "",
-		}).
+		"Authorization": "",
+	}).
 		Run(handler, func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
-			assert.Equal(t, http.StatusUnauthorized, r.Code)
-		})
+		assert.Equal(t, http.StatusUnauthorized, r.Code)
+	})
 
 	r.GET("/auth/refresh_token").
 		SetHeader(gofight.H{
-			"Authorization": "Test 1234",
-		}).
+		"Authorization": "Test 1234",
+	}).
 		Run(handler, func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
-			assert.Equal(t, http.StatusUnauthorized, r.Code)
-		})
+		assert.Equal(t, http.StatusUnauthorized, r.Code)
+	})
 	r.GET("/auth/refresh_token").
 		SetHeader(gofight.H{
-			"Authorization": "Bearer " + makeTokenString("HS256", "admin"),
-		}).
+		"Authorization": "Bearer " + makeTokenString("HS256", "admin"),
+	}).
 		Run(handler, func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
-			assert.Equal(t, http.StatusUnauthorized, r.Code)
-		})
+		assert.Equal(t, http.StatusUnauthorized, r.Code)
+	})
 	r.GET("/auth/refresh_token").
 		SetHeader(gofight.H{
-			"Authorization": "Bearer " + makeTokenString("RS256", "admin"),
-		}).
+		"Authorization": "Bearer " + makeTokenString("RS256", "admin"),
+	}).
 		Run(handler, func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
-			assert.Equal(t, http.StatusOK, r.Code)
-		})
+		assert.Equal(t, http.StatusOK, r.Code)
+	})
 }
 
 func TestRefreshHandler(t *testing.T) {
@@ -509,12 +509,12 @@ func TestRefreshHandler(t *testing.T) {
 		Key:        key,
 		Timeout:    time.Hour,
 		MaxRefresh: time.Hour * 24,
-		Authenticator: func(userId string, password string, c *gin.Context) (string, bool) {
+		Authenticator: func(userId string, password string, c *gin.Context) (string, error) {
 			if userId == "admin" && password == "admin" {
-				return userId, true
+				return userId, nil
 			}
 
-			return userId, false
+			return userId, ErrFailedAuthentication
 		},
 	}
 
@@ -524,27 +524,27 @@ func TestRefreshHandler(t *testing.T) {
 
 	r.GET("/auth/refresh_token").
 		SetHeader(gofight.H{
-			"Authorization": "",
-		}).
+		"Authorization": "",
+	}).
 		Run(handler, func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
-			assert.Equal(t, http.StatusUnauthorized, r.Code)
-		})
+		assert.Equal(t, http.StatusUnauthorized, r.Code)
+	})
 
 	r.GET("/auth/refresh_token").
 		SetHeader(gofight.H{
-			"Authorization": "Test 1234",
-		}).
+		"Authorization": "Test 1234",
+	}).
 		Run(handler, func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
-			assert.Equal(t, http.StatusUnauthorized, r.Code)
-		})
+		assert.Equal(t, http.StatusUnauthorized, r.Code)
+	})
 
 	r.GET("/auth/refresh_token").
 		SetHeader(gofight.H{
-			"Authorization": "Bearer " + makeTokenString("HS256", "admin"),
-		}).
+		"Authorization": "Bearer " + makeTokenString("HS256", "admin"),
+	}).
 		Run(handler, func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
-			assert.Equal(t, http.StatusOK, r.Code)
-		})
+		assert.Equal(t, http.StatusOK, r.Code)
+	})
 }
 
 func TestExpiredTokenOnRefreshHandler(t *testing.T) {
@@ -553,12 +553,12 @@ func TestExpiredTokenOnRefreshHandler(t *testing.T) {
 		Realm:   "test zone",
 		Key:     key,
 		Timeout: time.Hour,
-		Authenticator: func(userId string, password string, c *gin.Context) (string, bool) {
+		Authenticator: func(userId string, password string, c *gin.Context) (string, error) {
 			if userId == "admin" && password == "admin" {
-				return userId, true
+				return userId, nil
 			}
 
-			return userId, false
+			return userId, ErrFailedAuthentication
 		},
 	}
 
@@ -575,11 +575,11 @@ func TestExpiredTokenOnRefreshHandler(t *testing.T) {
 
 	r.GET("/auth/refresh_token").
 		SetHeader(gofight.H{
-			"Authorization": "Bearer " + tokenString,
-		}).
+		"Authorization": "Bearer " + tokenString,
+	}).
 		Run(handler, func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
-			assert.Equal(t, http.StatusUnauthorized, r.Code)
-		})
+		assert.Equal(t, http.StatusUnauthorized, r.Code)
+	})
 }
 
 func TestAuthorizator(t *testing.T) {
@@ -589,11 +589,11 @@ func TestAuthorizator(t *testing.T) {
 		Key:        key,
 		Timeout:    time.Hour,
 		MaxRefresh: time.Hour * 24,
-		Authenticator: func(userId string, password string, c *gin.Context) (string, bool) {
+		Authenticator: func(userId string, password string, c *gin.Context) (string, error) {
 			if userId == "admin" && password == "admin" {
-				return userId, true
+				return userId, nil
 			}
-			return userId, false
+			return userId, ErrFailedAuthentication
 		},
 		Authorizator: func(userId string, c *gin.Context) bool {
 			if userId != "admin" {
@@ -610,19 +610,19 @@ func TestAuthorizator(t *testing.T) {
 
 	r.GET("/auth/hello").
 		SetHeader(gofight.H{
-			"Authorization": "Bearer " + makeTokenString("HS256", "test"),
-		}).
+		"Authorization": "Bearer " + makeTokenString("HS256", "test"),
+	}).
 		Run(handler, func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
-			assert.Equal(t, http.StatusForbidden, r.Code)
-		})
+		assert.Equal(t, http.StatusForbidden, r.Code)
+	})
 
 	r.GET("/auth/hello").
 		SetHeader(gofight.H{
-			"Authorization": "Bearer " + makeTokenString("HS256", "admin"),
-		}).
+		"Authorization": "Bearer " + makeTokenString("HS256", "admin"),
+	}).
 		Run(handler, func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
-			assert.Equal(t, http.StatusOK, r.Code)
-		})
+		assert.Equal(t, http.StatusOK, r.Code)
+	})
 }
 
 func TestClaimsDuringAuthorization(t *testing.T) {
@@ -643,16 +643,16 @@ func TestClaimsDuringAuthorization(t *testing.T) {
 			// Set custom claim, to be checked in Authorizator method
 			return map[string]interface{}{"testkey": testkey, "exp": 0}
 		},
-		Authenticator: func(userId string, password string, c *gin.Context) (string, bool) {
+		Authenticator: func(userId string, password string, c *gin.Context) (string, error) {
 			if userId == "admin" && password == "admin" {
-				return "", true
+				return "", nil
 			}
 
 			if userId == "test" && password == "test" {
-				return "Administrator", true
+				return "Administrator", nil
 			}
 
-			return userId, false
+			return userId, ErrFailedAuthentication
 		},
 		Authorizator: func(userId string, c *gin.Context) bool {
 			jwtClaims := ExtractClaims(c)
@@ -676,53 +676,53 @@ func TestClaimsDuringAuthorization(t *testing.T) {
 
 	r.GET("/auth/hello").
 		SetHeader(gofight.H{
-			"Authorization": "Bearer " + userToken,
-		}).
+		"Authorization": "Bearer " + userToken,
+	}).
 		Run(handler, func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
-			assert.Equal(t, http.StatusOK, r.Code)
-		})
+		assert.Equal(t, http.StatusOK, r.Code)
+	})
 
 	r.POST("/login").
 		SetJSON(gofight.D{
-			"username": "admin",
-			"password": "admin",
-		}).
+		"username": "admin",
+		"password": "admin",
+	}).
 		Run(handler, func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
-			data := []byte(r.Body.String())
+		data := []byte(r.Body.String())
 
-			token, _ := jsonparser.GetString(data, "token")
-			userToken = token
-			assert.Equal(t, http.StatusOK, r.Code)
-		})
+		token, _ := jsonparser.GetString(data, "token")
+		userToken = token
+		assert.Equal(t, http.StatusOK, r.Code)
+	})
 
 	r.GET("/auth/hello").
 		SetHeader(gofight.H{
-			"Authorization": "Bearer " + userToken,
-		}).
+		"Authorization": "Bearer " + userToken,
+	}).
 		Run(handler, func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
-			assert.Equal(t, http.StatusOK, r.Code)
-		})
+		assert.Equal(t, http.StatusOK, r.Code)
+	})
 
 	r.POST("/login").
 		SetJSON(gofight.D{
-			"username": "test",
-			"password": "test",
-		}).
+		"username": "test",
+		"password": "test",
+	}).
 		Run(handler, func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
-			data := []byte(r.Body.String())
+		data := []byte(r.Body.String())
 
-			token, _ := jsonparser.GetString(data, "token")
-			userToken = token
-			assert.Equal(t, http.StatusOK, r.Code)
-		})
+		token, _ := jsonparser.GetString(data, "token")
+		userToken = token
+		assert.Equal(t, http.StatusOK, r.Code)
+	})
 
 	r.GET("/auth/hello").
 		SetHeader(gofight.H{
-			"Authorization": "Bearer " + userToken,
-		}).
+		"Authorization": "Bearer " + userToken,
+	}).
 		Run(handler, func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
-			assert.Equal(t, http.StatusOK, r.Code)
-		})
+		assert.Equal(t, http.StatusOK, r.Code)
+	})
 }
 
 func TestEmptyClaims(t *testing.T) {
@@ -735,16 +735,16 @@ func TestEmptyClaims(t *testing.T) {
 		Key:        key,
 		Timeout:    time.Hour,
 		MaxRefresh: time.Hour * 24,
-		Authenticator: func(userId string, password string, c *gin.Context) (string, bool) {
+		Authenticator: func(userId string, password string, c *gin.Context) (string, error) {
 			if userId == "admin" && password == "admin" {
-				return "", true
+				return "", nil
 			}
 
 			if userId == "test" && password == "test" {
-				return "Administrator", true
+				return "Administrator", nil
 			}
 
-			return userId, false
+			return userId, ErrFailedAuthentication
 		},
 		Unauthorized: func(c *gin.Context, code int, message string) {
 			jwtClaims = ExtractClaims(c)
@@ -757,11 +757,11 @@ func TestEmptyClaims(t *testing.T) {
 
 	r.GET("/auth/hello").
 		SetHeader(gofight.H{
-			"Authorization": "Bearer 1234",
-		}).
+		"Authorization": "Bearer 1234",
+	}).
 		Run(handler, func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
-			assert.Equal(t, http.StatusUnauthorized, r.Code)
-		})
+		assert.Equal(t, http.StatusUnauthorized, r.Code)
+	})
 
 	assert.Empty(t, jwtClaims)
 }
@@ -773,11 +773,11 @@ func TestUnauthorized(t *testing.T) {
 		Key:        key,
 		Timeout:    time.Hour,
 		MaxRefresh: time.Hour * 24,
-		Authenticator: func(userId string, password string, c *gin.Context) (string, bool) {
+		Authenticator: func(userId string, password string, c *gin.Context) (string, error) {
 			if userId == "admin" && password == "admin" {
-				return userId, true
+				return userId, nil
 			}
-			return userId, false
+			return userId, ErrFailedAuthentication
 		},
 		Unauthorized: func(c *gin.Context, code int, message string) {
 			c.String(code, message)
@@ -790,11 +790,11 @@ func TestUnauthorized(t *testing.T) {
 
 	r.GET("/auth/hello").
 		SetHeader(gofight.H{
-			"Authorization": "Bearer 1234",
-		}).
+		"Authorization": "Bearer 1234",
+	}).
 		Run(handler, func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
-			assert.Equal(t, http.StatusUnauthorized, r.Code)
-		})
+		assert.Equal(t, http.StatusUnauthorized, r.Code)
+	})
 }
 
 func TestTokenExpire(t *testing.T) {
@@ -804,11 +804,11 @@ func TestTokenExpire(t *testing.T) {
 		Key:        key,
 		Timeout:    time.Hour,
 		MaxRefresh: -time.Second,
-		Authenticator: func(userId string, password string, c *gin.Context) (string, bool) {
+		Authenticator: func(userId string, password string, c *gin.Context) (string, error) {
 			if userId == "admin" && password == "admin" {
-				return userId, true
+				return userId, nil
 			}
-			return userId, false
+			return userId, ErrFailedAuthentication
 		},
 		Unauthorized: func(c *gin.Context, code int, message string) {
 			c.String(code, message)
@@ -823,11 +823,11 @@ func TestTokenExpire(t *testing.T) {
 
 	r.GET("/auth/refresh_token").
 		SetHeader(gofight.H{
-			"Authorization": "Bearer " + userToken,
-		}).
+		"Authorization": "Bearer " + userToken,
+	}).
 		Run(handler, func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
-			assert.Equal(t, http.StatusUnauthorized, r.Code)
-		})
+		assert.Equal(t, http.StatusUnauthorized, r.Code)
+	})
 }
 
 func TestTokenFromQueryString(t *testing.T) {
@@ -836,11 +836,11 @@ func TestTokenFromQueryString(t *testing.T) {
 		Realm:   "test zone",
 		Key:     key,
 		Timeout: time.Hour,
-		Authenticator: func(userId string, password string, c *gin.Context) (string, bool) {
+		Authenticator: func(userId string, password string, c *gin.Context) (string, error) {
 			if userId == "admin" && password == "admin" {
-				return userId, true
+				return userId, nil
 			}
-			return userId, false
+			return userId, ErrFailedAuthentication
 		},
 		Unauthorized: func(c *gin.Context, code int, message string) {
 			c.String(code, message)
@@ -856,19 +856,19 @@ func TestTokenFromQueryString(t *testing.T) {
 
 	r.GET("/auth/refresh_token").
 		SetHeader(gofight.H{
-			"Authorization": "Bearer " + userToken,
-		}).
+		"Authorization": "Bearer " + userToken,
+	}).
 		Run(handler, func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
-			assert.Equal(t, http.StatusUnauthorized, r.Code)
-		})
+		assert.Equal(t, http.StatusUnauthorized, r.Code)
+	})
 
-	r.GET("/auth/refresh_token?token="+userToken).
+	r.GET("/auth/refresh_token?token=" + userToken).
 		SetHeader(gofight.H{
-			"Authorization": "Bearer " + userToken,
-		}).
+		"Authorization": "Bearer " + userToken,
+	}).
 		Run(handler, func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
-			assert.Equal(t, http.StatusOK, r.Code)
-		})
+		assert.Equal(t, http.StatusOK, r.Code)
+	})
 }
 
 func TestTokenFromCookieString(t *testing.T) {
@@ -877,11 +877,11 @@ func TestTokenFromCookieString(t *testing.T) {
 		Realm:   "test zone",
 		Key:     key,
 		Timeout: time.Hour,
-		Authenticator: func(userId string, password string, c *gin.Context) (string, bool) {
+		Authenticator: func(userId string, password string, c *gin.Context) (string, error) {
 			if userId == "admin" && password == "admin" {
-				return userId, true
+				return userId, nil
 			}
-			return userId, false
+			return userId, ErrFailedAuthentication
 		},
 		Unauthorized: func(c *gin.Context, code int, message string) {
 			c.String(code, message)
@@ -897,19 +897,19 @@ func TestTokenFromCookieString(t *testing.T) {
 
 	r.GET("/auth/refresh_token").
 		SetHeader(gofight.H{
-			"Authorization": "Bearer " + userToken,
-		}).
+		"Authorization": "Bearer " + userToken,
+	}).
 		Run(handler, func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
-			assert.Equal(t, http.StatusUnauthorized, r.Code)
-		})
+		assert.Equal(t, http.StatusUnauthorized, r.Code)
+	})
 
 	r.GET("/auth/refresh_token").
 		SetCookie(gofight.H{
-			"token": userToken,
-		}).
+		"token": userToken,
+	}).
 		Run(handler, func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
-			assert.Equal(t, http.StatusOK, r.Code)
-		})
+		assert.Equal(t, http.StatusOK, r.Code)
+	})
 }
 
 func TestDefineTokenHeadName(t *testing.T) {
@@ -919,11 +919,11 @@ func TestDefineTokenHeadName(t *testing.T) {
 		Key:           key,
 		Timeout:       time.Hour,
 		TokenHeadName: "JWTTOKEN       ",
-		Authenticator: func(userId string, password string, c *gin.Context) (string, bool) {
+		Authenticator: func(userId string, password string, c *gin.Context) (string, error) {
 			if userId == "admin" && password == "admin" {
-				return userId, true
+				return userId, nil
 			}
-			return userId, false
+			return userId, ErrFailedAuthentication
 		},
 	}
 
@@ -933,19 +933,19 @@ func TestDefineTokenHeadName(t *testing.T) {
 
 	r.GET("/auth/hello").
 		SetHeader(gofight.H{
-			"Authorization": "Bearer " + makeTokenString("HS256", "admin"),
-		}).
+		"Authorization": "Bearer " + makeTokenString("HS256", "admin"),
+	}).
 		Run(handler, func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
-			assert.Equal(t, http.StatusUnauthorized, r.Code)
-		})
+		assert.Equal(t, http.StatusUnauthorized, r.Code)
+	})
 
 	r.GET("/auth/hello").
 		SetHeader(gofight.H{
-			"Authorization": "JWTTOKEN " + makeTokenString("HS256", "admin"),
-		}).
+		"Authorization": "JWTTOKEN " + makeTokenString("HS256", "admin"),
+	}).
 		Run(handler, func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
-			assert.Equal(t, http.StatusOK, r.Code)
-		})
+		assert.Equal(t, http.StatusOK, r.Code)
+	})
 }
 
 func TestHTTPStatusMessageFunc(t *testing.T) {
@@ -957,12 +957,12 @@ func TestHTTPStatusMessageFunc(t *testing.T) {
 		Key:        key,
 		Timeout:    time.Hour,
 		MaxRefresh: time.Hour * 24,
-		Authenticator: func(userId string, password string, c *gin.Context) (string, bool) {
+		Authenticator: func(userId string, password string, c *gin.Context) (string, error) {
 			if userId == "admin" && password == "admin" {
-				return "", true
+				return "", nil
 			}
 
-			return "", false
+			return "", ErrFailedAuthentication
 		},
 
 		HTTPStatusMessageFunc: func(e error, c *gin.Context) string {
